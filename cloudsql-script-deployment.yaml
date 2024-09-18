@@ -1,4 +1,4 @@
-- name: Install SQL scripts on Private PostgreSQL Instance
+- name: Install SQL scripts on Private PostgreSQL Instance 
   hosts: localhost
   gather_facts: no
   
