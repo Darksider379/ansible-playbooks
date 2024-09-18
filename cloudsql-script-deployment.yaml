@@ -1,0 +1,61 @@
+- name: Install SQL scripts on Private PostgreSQL Instance
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: Install required apt packages
+      apt:
+        name: 
+          - libpq-dev
+          
+    - name: Install required python packages
+      pip:
+        name: 
+          - psycopg2
+
+    - name: Download cloudSQL proxy
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.13.0/cloud-sql-proxy.linux.amd64
+        dest: ./cloud-sql-proxy
+        mode: "0755"
+
+    - name: Set up ADC
+      command:
+        gcloud config set auth/impersonate_service_account '{{ service_account }}'
+
+    - name: Set GCP project
+      command:
+        gcloud config set project '{{ gcp_project }}'
+
+    - name: Print gcloud config
+      command:
+        gcloud config list
+        
+    - name: Start cloudSQL proxy
+      command: ./cloud-sql-proxy --private-ip "{{ gcp_project }}:{{ db_instance_location }}:{{ db_instance_name }}"
+      async: 3600
+      poll: 0
+
+    - name: List SQL files to be executed
+      find:
+        paths: DDL/
+        file_type: file
+        recurse: yes
+        patterns: "*.sql"
+        age: "-1d"
+      register: files_matched
+
+    - name: Connect to SQL instance
+      ignore_errors: true
+      loop: "{{ files_matched.files|flatten(levels=1) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      community.postgresql.postgresql_script:
+        db: "{{ db_name }}"
+        login_host: "127.0.0.1"
+        login_password: "{{ db_password  }}"
+        login_user: "{{ db_user  }}"
+        port: "5432"
+        path: "{{ item.path }}"
+        encoding: UTF-8
+    
